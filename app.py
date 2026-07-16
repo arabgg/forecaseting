@@ -370,7 +370,7 @@ def impute_daily(daily: pd.Series, method: str) -> tuple[pd.Series, int]:
     Parameters
     ----------
     daily  : pd.Series harian dengan NaN di tanggal kosong
-    method : "linear" | "dow_mean" | "ffill"
+    method : "linear" | "dow_mean" | "ffill" | "no_imputation"
 
     Returns
     -------
@@ -380,6 +380,10 @@ def impute_daily(daily: pd.Series, method: str) -> tuple[pd.Series, int]:
 
     if n_missing == 0:
         return daily.fillna(0), 0
+
+    # Jika imputasi dinonaktifkan → isi semua NaN dengan 0
+    if method == "no_imputation":
+        return daily.fillna(0), n_missing
 
     if method == "linear":
         # Interpolasi linear; sisa ujung yang masih NaN → forward-fill lalu backward-fill
@@ -951,9 +955,9 @@ def render_sidebar(df: pd.DataFrame):
         st.markdown("#### 📂 Upload Data SO Harian")
         uploaded = st.file_uploader(
             "File Excel (.xlsx)",
-            type=["xlsx"],
+            type=None,                  # Biarkan None agar semua tipe bisa masuk → kita validasi manual
             label_visibility="collapsed",
-            help="Upload file SO Harian Kendalsari format Excel",
+            help="Upload file SO Harian Kendalsari format Excel (.xlsx)",
         )
 
         # ── Peringatan format & link template ──
@@ -966,22 +970,33 @@ def render_sidebar(df: pd.DataFrame):
             "1Gw-txJTPWFGI8fXLDGU2AidZtV0vM6j4v4Ef5YrhiLc/edit?usp=sharing)"
         )
 
-        # ── Pilih sumber data ──
+        # ── Validasi tipe file & pilih sumber data ──
         use_real = False
         df_real  = None
         if uploaded is not None:
-            with st.spinner("Membaca file..."):
-                file_bytes = uploaded.read()
-                df_real, msg = load_excel_file(file_bytes)
-            if df_real is not None:
-                st.success(msg)
-                use_real = True
-                df = df_real
+            # Validasi ekstensi file secara manual
+            file_name = uploaded.name.lower()
+            if not file_name.endswith(".xlsx"):
+                st.error(
+                    "❌ **Format file tidak valid!**\n\n"
+                    f"File **'{uploaded.name}'** bukan file Excel. "
+                    "Hanya file berformat **`.xlsx`** yang diterima. "
+                    "Silakan upload ulang dengan file yang benar."
+                )
+                st.info("🎲 Menggunakan **data demo** sebagai gantinya.")
             else:
-                st.error(msg)
-                st.info("Menggunakan **data demo** sebagai gantinya.")
+                with st.spinner("Membaca file..."):
+                    file_bytes = uploaded.read()
+                    df_real, msg = load_excel_file(file_bytes)
+                if df_real is not None:
+                    st.success(msg)
+                    use_real = True
+                    df = df_real
+                else:
+                    st.error(msg)
+                    st.info("Menggunakan **data demo** sebagai gantinya.")
 
-        if not use_real:
+        if not use_real and uploaded is None:
             st.info("🎲 Menggunakan **data demo** (mock data dengan tanggal bolong).")
 
         st.markdown("---")
@@ -1038,24 +1053,51 @@ def render_sidebar(df: pd.DataFrame):
 
         # ── Metode Imputasi Data Kosong ──
         st.markdown("#### 🩹 Imputasi Data Kosong")
+
+        # Toggle: aktifkan atau nonaktifkan imputasi
+        use_imputation = st.toggle(
+            "Gunakan Imputasi",
+            value=True,
+            help=(
+                "Aktifkan untuk mengisi tanggal kosong secara otomatis. "
+                "Jika dinonaktifkan, hari tanpa record akan diisi dengan nilai 0."
+            ),
+        )
+
+        # Dropdown hanya aktif jika toggle ON
         imputation_label = st.selectbox(
             "Metode imputasi",
             options=list(IMPUTATION_METHODS.keys()),
             index=0,
+            disabled=not use_imputation,
             help=(
                 "Pilih cara sistem mengisi tanggal yang tidak ada record-nya. "
                 "Data kosong bukan berarti 0 — bisa jadi staf lupa mencatat (False Zero)."
             ),
         )
-        imputation_key = IMPUTATION_METHODS[imputation_label]
 
-        # Tampilkan penjelasan singkat metode yang dipilih
-        st.markdown(
-            f'<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #58a6ff;'
-            f'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
-            f'{IMPUTATION_DESC[imputation_label]}</div>',
-            unsafe_allow_html=True,
-        )
+        # Jika toggle OFF → paksa gunakan ffill sederhana (isi 0), abaikan pilihan dropdown
+        if not use_imputation:
+            imputation_key   = "no_imputation"
+            imputation_label = "Tanpa Imputasi (isi 0)"
+            st.markdown(
+                '<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #f85149;'
+                'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
+                '⚠️ Imputasi <b style="color:#f85149">dinonaktifkan</b>. '
+                'Semua tanggal tanpa record akan diisi <b>0</b>. '
+                'Perhatikan potensi <em>false zero bias</em> pada hasil forecasting.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            imputation_key = IMPUTATION_METHODS[imputation_label]
+            # Tampilkan penjelasan singkat metode yang dipilih
+            st.markdown(
+                f'<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #58a6ff;'
+                f'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
+                f'{IMPUTATION_DESC[imputation_label]}</div>',
+                unsafe_allow_html=True,
+            )
 
         st.markdown("---")
         st.markdown(
