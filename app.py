@@ -339,24 +339,13 @@ def load_excel_file(file_bytes: bytes) -> tuple[pd.DataFrame, str]:
 # ═══════════════════════════════════════════════════════════════
 
 IMPUTATION_METHODS = {
-    "Linear Interpolation" : "linear",
-    "Day-of-Week Mean"     : "dow_mean",
-    "Forward Fill (LOCF)"  : "ffill",
+    "Forward Fill (LOCF)" : "ffill",
 }
 
 IMPUTATION_DESC = {
-    "Linear Interpolation": (
-        "Mengisi tanggal kosong berdasarkan **garis tren linear** antara nilai "
-        "hari sebelum dan sesudahnya. Cocok saat data memiliki tren naik/turun yang konsisten."
-    ),
-    "Day-of-Week Mean": (
-        "Mengisi tanggal kosong dengan **rata-rata hari yang sama** dalam seminggu "
-        "(misal: Sabtu kosong → rata-rata semua Sabtu lainnya). Sangat cocok untuk "
-        "bisnis F&B yang memiliki pola *weekend peak*."
-    ),
     "Forward Fill (LOCF)": (
-        "Mengisi tanggal kosong dengan **nilai terakhir yang tercatat** sebelum "
-        "tanggal tersebut (*Last Observation Carried Forward*). Cocok saat data "
+        "Mengisi tanggal kosong dengan <b>nilai terakhir yang tercatat</b> sebelum "
+        "tanggal tersebut (<em>Last Observation Carried Forward</em>). Cocok saat data "
         "cenderung stabil tanpa fluktuasi besar harian."
     ),
 }
@@ -1054,32 +1043,31 @@ def render_sidebar(df: pd.DataFrame):
         # ── Metode Imputasi Data Kosong ──
         st.markdown("#### 🩹 Imputasi Data Kosong")
 
-        # Toggle: aktifkan atau nonaktifkan imputasi
+        # Toggle: aktifkan atau nonaktifkan imputasi (Forward Fill)
         use_imputation = st.toggle(
             "Gunakan Imputasi",
             value=True,
             help=(
-                "Aktifkan untuk mengisi tanggal kosong secara otomatis. "
+                "Aktifkan untuk mengisi tanggal kosong menggunakan Forward Fill (LOCF). "
                 "Jika dinonaktifkan, hari tanpa record akan diisi dengan nilai 0."
             ),
         )
 
-        # Dropdown hanya aktif jika toggle ON
-        imputation_label = st.selectbox(
-            "Metode imputasi",
-            options=list(IMPUTATION_METHODS.keys()),
-            index=0,
-            disabled=not use_imputation,
-            help=(
-                "Pilih cara sistem mengisi tanggal yang tidak ada record-nya. "
-                "Data kosong bukan berarti 0 — bisa jadi staf lupa mencatat (False Zero)."
-            ),
-        )
-
-        # Jika toggle OFF → paksa gunakan ffill sederhana (isi 0), abaikan pilihan dropdown
-        if not use_imputation:
-            imputation_key   = "no_imputation"
+        if use_imputation:
+            imputation_label = "Forward Fill (LOCF)"
+            imputation_key   = "ffill"
+            st.markdown(
+                '<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #58a6ff;'
+                'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
+                '✅ Imputasi <b style="color:#58a6ff">aktif</b> — metode <b>Forward Fill (LOCF)</b>.<br>'
+                'Mengisi tanggal kosong dengan <b>nilai terakhir yang tercatat</b> sebelum '
+                'tanggal tersebut (<em>Last Observation Carried Forward</em>).'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
             imputation_label = "Tanpa Imputasi (isi 0)"
+            imputation_key   = "no_imputation"
             st.markdown(
                 '<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #f85149;'
                 'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
@@ -1087,15 +1075,6 @@ def render_sidebar(df: pd.DataFrame):
                 'Semua tanggal tanpa record akan diisi <b>0</b>. '
                 'Perhatikan potensi <em>false zero bias</em> pada hasil forecasting.'
                 '</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            imputation_key = IMPUTATION_METHODS[imputation_label]
-            # Tampilkan penjelasan singkat metode yang dipilih
-            st.markdown(
-                f'<div style="background:#1c2128;border:1px solid #30363d;border-left:3px solid #58a6ff;'
-                f'border-radius:8px;padding:10px 12px;font-size:.75rem;color:#8b949e;line-height:1.6">'
-                f'{IMPUTATION_DESC[imputation_label]}</div>',
                 unsafe_allow_html=True,
             )
 
